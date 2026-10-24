@@ -367,6 +367,7 @@ class HeroView(c: Context) : View(c) {
     var sub = "Shizuku is not running"
     var color = C.BAD
     var art: Drawable? = null
+    var frame: Drawable? = null
 
     private var t = 0f
     private val glow = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -461,11 +462,17 @@ class HeroView(c: Context) : View(c) {
         tp.textSize = context.sp(12f)
         tp.letterSpacing = 0.05f
         c.drawText(sub, cx, cy + r + d(40f), tp)
+
+        frame?.let {
+            it.setBounds(0, 0, width, height)
+            it.draw(c)
+        }
     }
 }
 
 class BackdropView(c: Context) : View(c) {
     var art: Drawable? = null
+    var layer: Drawable? = null
     private var t = 0f
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     private val anim = ValueAnimator.ofFloat(0f, 1f).apply {
@@ -499,6 +506,14 @@ class BackdropView(c: Context) : View(c) {
         c.drawRect(0f, 0f, w, h, p)
         p.shader = RadialGradient(w * (0.10f + 0.12f * t), h * 0.92f, w * 0.9f, withAlpha(C.ACCENT, 45), Color.TRANSPARENT, Shader.TileMode.CLAMP)
         c.drawRect(0f, 0f, w, h, p)
+
+        layer?.let {
+            c.save()
+            c.translate((t - 0.5f) * 24f * resources.displayMetrics.density, 0f)
+            c.scale(1.08f, 1.08f, w / 2f, h / 2f)
+            drawCenterCrop(c, it, w, h)
+            c.restore()
+        }
 
         p.shader = null
         p.style = Paint.Style.STROKE

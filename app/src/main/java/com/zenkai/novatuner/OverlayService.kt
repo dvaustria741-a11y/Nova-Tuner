@@ -9,6 +9,8 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.IBinder
 import android.provider.Settings
 import android.text.TextUtils
@@ -44,6 +46,11 @@ class OverlayService : Service() {
     private var expanded = false
     private var savedY = -1
     private var attached = false
+    private var hud: TextView? = null
+    private var hudOn = false
+    private var inFlight = false
+    private val handler = Handler(Looper.getMainLooper())
+    private val tick = Runnable { hudTick() }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -58,12 +65,18 @@ class OverlayService : Service() {
             return
         }
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
+        hudOn = getSharedPreferences("nova", 0).getBoolean("hud", false)
         buildOverlay()
         running = true
+        if (hudOn) {
+            Shell.bind(this)
+            handler.postDelayed(tick, 800)
+        }
     }
 
     override fun onDestroy() {
         running = false
+        handler.removeCallbacks(tick)
         if (attached) {
             try {
                 root?.let { wm.removeView(it) }
@@ -108,6 +121,14 @@ class OverlayService : Service() {
         }
         orb = o
         r.addView(o)
+
+        val h = tv("", 11f, C.ACCENT, true)
+        h.setSingleLine()
+        h.setPadding(dp(8), dp(4), dp(8), dp(4))
+        h.background = cut(C.PANEL, 6)
+        h.visibility = if (hudOn) View.VISIBLE else View.GONE
+        hud = h
+        r.addView(h, hudLp())
 
         params = WindowManager.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -187,8 +208,10 @@ class OverlayService : Service() {
         val ph = p.measuredHeight
         r.removeAllViews()
         val lp = LinearLayout.LayoutParams(dp(250), ViewGroup.LayoutParams.WRAP_CONTENT)
+        val h = hud
         if (below) {
             r.addView(o)
+            if (h != null) r.addView(h, hudLp())
             lp.topMargin = dp(8)
             r.addView(p, lp)
             p.pivotY = 0f
@@ -198,6 +221,7 @@ class OverlayService : Service() {
             lp.bottomMargin = dp(8)
             r.addView(p, lp)
             r.addView(o)
+            if (h != null) r.addView(h, hudLp())
             p.pivotY = ph.toFloat()
         }
         p.alpha = 0f
@@ -262,6 +286,7 @@ class OverlayService : Service() {
             grid.addView(line)
         }
         p.put(grid, 10)
+        p.put(switchRow("Live HUD", "FPS, temperature, free RAM", hudOn) { setHud(it) }, 4)
 
         p.put(btn("Open Nova Tuner", BTN_PRIMARY) {
             val i = Intent(this, MainActivity::class.java)
@@ -299,6 +324,46 @@ class OverlayService : Service() {
             val pkg = m?.groupValues?.get(1)
             front = if (pkg == null || pkg == packageName) null else pkg
             updateFront()
+        }
+    }
+
+    private fun hudLp(): LinearLayout.LayoutParams {
+        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        lp.topMargin = dp(4)
+        return lp
+    }
+
+    private fun setHud(on: Boolean) {
+        hudOn = on
+        getSharedPreferences("nova", 0).edit().putBoolean("hud", on).apply()
+        hud?.visibility = if (on) View.VISIBLE else View.GONE
+        root?.let { if (attached) wm.updateViewLayout(it, params) }
+        handler.removeCallbacks(tick)
+        if (on) {
+            Shell.bind(this)
+            handler.post(tick)
+        }
+    }
+
+    private fun hudTick() {
+        if (!hudOn || !attached) return
+        if (Shell.service == null) {
+            Shell.bind(this)
+            hud?.text = "Shizuku not connected"
+            handler.postDelayed(tick, 3000)
+            return
+        }
+        if (inFlight) return
+        inFlight = true
+        Shell.exec(Stats.script(front)) { out ->
+            inFlight = false
+            if (hudOn && attached) {
+                val r = Stats.parse(out)
+                val f = r.front
+                front = if (f == null || f == packageName) null else f
+                hud?.text = Stats.format(r)
+                handler.postDelayed(tick, 2000)
+            }
         }
     }
 

@@ -18,5 +18,9 @@ Only apps you add are touched; every tweak is stored per package and can be rest
 3. Add a game (e.g. CODM), set options, tap **Apply & Launch**.
 
 ## Build
-Pushed to `main` -> GitHub Actions builds `app/build/outputs/apk/release/*.apk` (artifact `NovaTuner-apk`).
+
 The APK is signed with the committed `app/nova.jks` so updates install over each other (hobby key, not for store release).
+
+## Optional art slots
+Drop PNGs with these exact names into `app/src/main/res/drawable-nodpi/` and the app picks them up automatically:
+`bg_main`, `bg_layer`, `hero_art`, `hero_overlay`, `overlay_orb`, `ic_launcher`.

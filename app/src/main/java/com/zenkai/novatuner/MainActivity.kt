@@ -46,6 +46,7 @@ class MainActivity : Activity() {
         val root = FrameLayout(this)
         val backdrop = BackdropView(this)
         backdrop.art = assetDrawable("bg_main")
+        backdrop.layer = assetDrawable("bg_layer")
         root.addView(backdrop, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         holder = ScrollView(this)
         holder.isFillViewport = true
@@ -158,6 +159,7 @@ class MainActivity : Activity() {
 
         val hero = HeroView(this)
         hero.art = assetDrawable("hero_art")
+        hero.frame = assetDrawable("hero_overlay")
         when {
             !Shell.running() -> {
                 hero.title = "NO LINK"
