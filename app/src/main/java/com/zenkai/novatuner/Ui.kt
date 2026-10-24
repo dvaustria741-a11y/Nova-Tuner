@@ -5,6 +5,8 @@ import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.BitmapFactory
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.ColorFilter
 import android.graphics.LinearGradient
@@ -78,6 +80,52 @@ fun Context.sp(v: Float): Float =
 fun Context.assetDrawable(name: String): Drawable? {
     val id = resources.getIdentifier(name, "drawable", packageName)
     return if (id != 0) resources.getDrawable(id, theme) else null
+}
+
+class SliceDrawable(private val bmp: Bitmap, private val src: Int, private val dst: Float) : Drawable() {
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val s = Rect()
+    private val d = Rect()
+
+    override fun draw(c: Canvas) {
+        val b = bounds
+        if (b.isEmpty) return
+        val w = b.width()
+        val h = b.height()
+        val e = minOf(dst, w / 2f, h / 2f).toInt()
+        val bw = bmp.width
+        val bh = bmp.height
+        val xs = intArrayOf(0, src, bw - src, bw)
+        val ys = intArrayOf(0, src, bh - src, bh)
+        val xd = intArrayOf(b.left, b.left + e, b.right - e, b.right)
+        val yd = intArrayOf(b.top, b.top + e, b.bottom - e, b.bottom)
+        for (r in 0 until 3) {
+            for (q in 0 until 3) {
+                s.set(xs[q], ys[r], xs[q + 1], ys[r + 1])
+                d.set(xd[q], yd[r], xd[q + 1], yd[r + 1])
+                c.drawBitmap(bmp, s, d, p)
+            }
+        }
+    }
+
+    override fun setAlpha(alpha: Int) {
+        p.alpha = alpha
+    }
+
+    override fun setColorFilter(cf: ColorFilter?) {}
+
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+}
+
+private val sliceCache = HashMap<String, Bitmap?>()
+
+fun Context.slice(name: String, srcInset: Int, dstDp: Int): Drawable? {
+    val bmp = sliceCache.getOrPut(name) {
+        val id = resources.getIdentifier(name, "drawable", packageName)
+        if (id == 0) null else BitmapFactory.decodeResource(resources, id, BitmapFactory.Options().apply { inScaled = false })
+    } ?: return null
+    return SliceDrawable(bmp, srcInset, dp(dstDp).toFloat())
 }
 
 fun drawCenterCrop(c: Canvas, art: Drawable, w: Float, h: Float) {
@@ -161,7 +209,7 @@ fun Context.vbox(pad: Int = 0): LinearLayout =
         setPadding(dp(pad), dp(pad), dp(pad), dp(pad))
     }
 
-fun Context.panel(): LinearLayout = vbox(14).apply { background = cut(C.PANEL, 12) }
+fun Context.panel(): LinearLayout = vbox(16).apply { background = slice("fx_card", 45, 12) ?: cut(C.PANEL, 12) }
 
 fun LinearLayout.put(v: View, top: Int = 0): LinearLayout {
     val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -211,8 +259,9 @@ fun Context.btn(text: String, kind: Int = BTN_PRIMARY, onClick: () -> Unit): Tex
     t.gravity = Gravity.CENTER
     when (kind) {
         BTN_PRIMARY -> {
-            t.setTextColor(C.BG)
-            t.background = cut(C.ACCENT, 10, true, Color.parseColor("#7FB4FF"))
+            val bgd = slice("fx_primary", 28, 10)
+            t.setTextColor(if (bgd != null) C.TEXT else C.BG)
+            t.background = bgd ?: cut(C.ACCENT, 10, true, Color.parseColor("#7FB4FF"))
         }
         BTN_GOOD -> {
             t.setTextColor(C.BG)
@@ -224,7 +273,7 @@ fun Context.btn(text: String, kind: Int = BTN_PRIMARY, onClick: () -> Unit): Tex
         }
         else -> {
             t.setTextColor(C.ACCENT)
-            t.background = cut(C.PANEL2, 10, false)
+            t.background = slice("fx_ghost", 22, 9) ?: cut(C.PANEL2, 10, false)
         }
     }
     t.setPadding(dp(16), dp(14), dp(16), dp(14))
@@ -240,7 +289,11 @@ fun Context.chips(options: List<String>, selected: Int, onSelect: (Int) -> Unit)
         views.forEachIndexed { i, v ->
             val on = i == sel
             v.setTextColor(if (on) C.BG else C.TEXT)
-            v.background = if (on) cut(C.ACCENT, 6, false, Color.parseColor("#7FB4FF")) else cut(C.PANEL2, 6, false)
+            v.background = if (on) {
+                slice("fx_chip_on", 30, 8) ?: cut(C.ACCENT, 6, false, Color.parseColor("#7FB4FF"))
+            } else {
+                slice("fx_chip_off", 30, 8) ?: cut(C.PANEL2, 6, false)
+            }
         }
     }
     options.forEachIndexed { i, o ->
@@ -418,38 +471,49 @@ class HeroView(c: Context) : View(c) {
         glow.shader = RadialGradient(cx, cy, r * 2f, withAlpha(color, 80), Color.TRANSPARENT, Shader.TileMode.CLAMP)
         c.drawCircle(cx, cy, r * 2f, glow)
 
-        stroke.shader = null
-        stroke.color = C.LINE
-        stroke.strokeWidth = d(2f)
-        c.drawCircle(cx, cy, r, stroke)
-
-        stroke.color = withAlpha(C.TEXT, 60)
-        stroke.strokeWidth = d(1.5f)
-        for (i in 0 until 60) {
+        val ring = frame
+        if (ring != null) {
+            val side = (r * 2f * 1.62f).toInt()
             c.save()
-            c.rotate(i * 6f + t * 0.15f, cx, cy)
-            val len = if (i % 5 == 0) d(9f) else d(4f)
-            c.drawLine(cx, cy - r - d(10f), cx, cy - r - d(10f) - len, stroke)
+            c.rotate(t * 0.12f, cx, cy)
+            ring.setBounds((cx - side / 2f).toInt(), (cy - side / 2f).toInt(), (cx + side / 2f).toInt(), (cy + side / 2f).toInt())
+            ring.draw(c)
             c.restore()
+        } else {
+            stroke.shader = null
+            stroke.color = C.LINE
+            stroke.strokeWidth = d(2f)
+            c.drawCircle(cx, cy, r, stroke)
+
+            stroke.color = withAlpha(C.TEXT, 60)
+            stroke.strokeWidth = d(1.5f)
+            for (i in 0 until 60) {
+                c.save()
+                c.rotate(i * 6f + t * 0.15f, cx, cy)
+                val len = if (i % 5 == 0) d(9f) else d(4f)
+                c.drawLine(cx, cy - r - d(10f), cx, cy - r - d(10f) - len, stroke)
+                c.restore()
+            }
+
+            stroke.color = color
+            stroke.strokeWidth = d(4f)
+            rect.set(cx - r, cy - r, cx + r, cy + r)
+            c.save()
+            c.rotate(t, cx, cy)
+            c.drawArc(rect, 0f, 100f, false, stroke)
+            c.restore()
+
+            stroke.color = C.ACCENT2
+            stroke.strokeWidth = d(3f)
+            val r2 = r * 0.8f
+            rect.set(cx - r2, cy - r2, cx + r2, cy + r2)
+            c.save()
+            c.rotate(-t * 1.6f, cx, cy)
+            c.drawArc(rect, 0f, 60f, false, stroke)
+            c.drawArc(rect, 180f, 60f, false, stroke)
+            c.restore()
+
         }
-
-        stroke.color = color
-        stroke.strokeWidth = d(4f)
-        rect.set(cx - r, cy - r, cx + r, cy + r)
-        c.save()
-        c.rotate(t, cx, cy)
-        c.drawArc(rect, 0f, 100f, false, stroke)
-        c.restore()
-
-        stroke.color = C.ACCENT2
-        stroke.strokeWidth = d(3f)
-        val r2 = r * 0.8f
-        rect.set(cx - r2, cy - r2, cx + r2, cy + r2)
-        c.save()
-        c.rotate(-t * 1.6f, cx, cy)
-        c.drawArc(rect, 0f, 60f, false, stroke)
-        c.drawArc(rect, 180f, 60f, false, stroke)
-        c.restore()
 
         tp.typeface = Fonts.bold
         tp.color = C.TEXT
@@ -463,10 +527,6 @@ class HeroView(c: Context) : View(c) {
         tp.letterSpacing = 0.05f
         c.drawText(sub, cx, cy + r + d(40f), tp)
 
-        frame?.let {
-            it.setBounds(0, 0, width, height)
-            it.draw(c)
-        }
     }
 }
 

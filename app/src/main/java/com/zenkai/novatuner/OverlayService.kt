@@ -257,15 +257,14 @@ class OverlayService : Service() {
     }
 
     private fun buildPanel(): LinearLayout {
-        val p = vbox(14)
-        p.background = cut(C.PANEL, 12)
+        val p = vbox(18)
+        p.background = slice("fx_panel", 55, 14) ?: cut(C.PANEL, 12)
 
         val head = LinearLayout(this)
         head.orientation = LinearLayout.HORIZONTAL
         head.gravity = Gravity.CENTER_VERTICAL
-        head.addView(dot(C.ACCENT), LinearLayout.LayoutParams(dp(8), dp(8)))
         val hl = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        hl.leftMargin = dp(8)
+        hl.leftMargin = dp(18)
         head.addView(tv("NOVA TUNER", 13f, C.TEXT, true, 0.12f), hl)
         p.put(head)
 
@@ -316,8 +315,8 @@ class OverlayService : Service() {
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(i)
         }, 6)
-        val rl = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.15f)
-        rl.leftMargin = dp(12)
+        val rl = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        rl.leftMargin = dp(18)
         body.addView(right, rl)
 
         p.put(body, 10)
