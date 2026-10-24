@@ -45,6 +45,7 @@ class OverlayService : Service() {
     private var front: String? = null
     private var expanded = false
     private var savedY = -1
+    private var savedX = -1
     private var attached = false
     private var hud: TextView? = null
     private var hudOn = false
@@ -200,14 +201,20 @@ class OverlayService : Service() {
         val p = buildPanel()
         panel = p
         val screenH = resources.displayMetrics.heightPixels
+        val screenW = resources.displayMetrics.widthPixels
+        val panelW = minOf(dp(440), screenW - dp(16))
         val below = params.y < screenH * 0.55f
+        if (params.x + panelW > screenW) {
+            savedX = params.x
+            params.x = max(0, screenW - panelW - dp(8))
+        }
         p.measure(
-            View.MeasureSpec.makeMeasureSpec(dp(250), View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(panelW, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(screenH, View.MeasureSpec.AT_MOST)
         )
         val ph = p.measuredHeight
         r.removeAllViews()
-        val lp = LinearLayout.LayoutParams(dp(250), ViewGroup.LayoutParams.WRAP_CONTENT)
+        val lp = LinearLayout.LayoutParams(panelW, ViewGroup.LayoutParams.WRAP_CONTENT)
         val h = hud
         if (below) {
             r.addView(o)
@@ -241,6 +248,10 @@ class OverlayService : Service() {
                 params.y = savedY
                 savedY = -1
             }
+            if (savedX >= 0) {
+                params.x = savedX
+                savedX = -1
+            }
             wm.updateViewLayout(r, params)
         }.start()
     }
@@ -258,17 +269,31 @@ class OverlayService : Service() {
         head.addView(tv("NOVA TUNER", 13f, C.TEXT, true, 0.12f), hl)
         p.put(head)
 
-        p.put(tv("FRONT APP", 10f, C.ACCENT, true, 0.2f), 12)
+        val body = LinearLayout(this)
+        body.orientation = LinearLayout.HORIZONTAL
+
+        val left = LinearLayout(this)
+        left.orientation = LinearLayout.VERTICAL
+        left.addView(tv("FRONT APP", 10f, C.ACCENT, true, 0.2f))
         val fv = tv("Detecting", 15f, C.TEXT, true)
         fv.setSingleLine()
         fv.ellipsize = TextUtils.TruncateAt.END
         frontView = fv
-        p.put(fv, 2)
+        left.put(fv, 2)
         val sv = tv("", 12f, C.DIM)
         sv.setSingleLine()
         stateView = sv
-        p.put(sv, 2)
+        left.put(sv, 2)
+        left.put(switchRow("Live HUD", "FPS, temp, free RAM", hudOn) { setHud(it) }, 8)
+        val st = tv("Restart the game after applying", 11f, C.DIM)
+        st.setSingleLine()
+        st.ellipsize = TextUtils.TruncateAt.END
+        statusView = st
+        left.put(st, 6)
+        body.addView(left, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
+        val right = LinearLayout(this)
+        right.orientation = LinearLayout.VERTICAL
         val grid = LinearLayout(this)
         grid.orientation = LinearLayout.VERTICAL
         for (row in 0 until 2) {
@@ -278,27 +303,24 @@ class OverlayService : Service() {
                 val pr = Presets.QUICK[row * 2 + col]
                 val b = btn(pr.name, BTN_GHOST) { applyPreset(pr) }
                 b.textSize = 11f
-                b.setPadding(dp(6), dp(12), dp(6), dp(12))
+                b.setPadding(dp(6), dp(10), dp(6), dp(10))
                 val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 lp.setMargins(dp(3), dp(3), dp(3), dp(3))
                 line.addView(b, lp)
             }
             grid.addView(line)
         }
-        p.put(grid, 10)
-        p.put(switchRow("Live HUD", "FPS, temperature, free RAM", hudOn) { setHud(it) }, 4)
-
-        p.put(btn("Open Nova Tuner", BTN_PRIMARY) {
+        right.addView(grid)
+        right.put(btn("Open Nova Tuner", BTN_PRIMARY) {
             val i = Intent(this, MainActivity::class.java)
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(i)
-        }, 8)
+        }, 6)
+        val rl = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.15f)
+        rl.leftMargin = dp(12)
+        body.addView(right, rl)
 
-        val st = tv("Restart the game after applying", 11f, C.DIM)
-        st.setSingleLine()
-        st.ellipsize = TextUtils.TruncateAt.END
-        statusView = st
-        p.put(st, 8)
+        p.put(body, 10)
         return p
     }
 

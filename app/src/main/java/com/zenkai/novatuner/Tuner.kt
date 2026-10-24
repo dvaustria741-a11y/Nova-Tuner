@@ -29,6 +29,14 @@ object Tuner {
         return if (parts.isEmpty()) "No tweaks set" else parts.joinToString(" · ")
     }
 
+    private fun overlayValue(mode: Int, p: Profile): String {
+        val parts = mutableListOf("mode=$mode")
+        if (p.downscale > 0) parts.add("downscaleFactor=${DOWNSCALE_VALUES[p.downscale]}")
+        if (p.fps > 0) parts.add("fps=${FPS_VALUES[p.fps]}")
+        if (p.angle) parts.add("useAngle=true")
+        return parts.joinToString(",")
+    }
+
     private fun effectiveMode(p: Profile): Int =
         if (p.gameMode == 0 && (p.downscale > 0 || p.fps > 0)) 2 else p.gameMode
 
@@ -49,6 +57,10 @@ object Tuner {
         if (launch) s.add("am force-stop ${p.pkg}")
         val mode = effectiveMode(p)
         if (mode > 0) {
+            if (p.downscale > 0 || p.fps > 0) {
+                s.add("device_config put game_overlay ${p.pkg} ${overlayValue(mode, p)}")
+                s.add("sleep 1")
+            }
             var set = "cmd game set --mode ${MODE_NAMES[mode]}"
             if (p.downscale > 0) set += " --downscale ${DOWNSCALE_VALUES[p.downscale]}"
             if (p.fps > 0) set += " --fps ${FPS_VALUES[p.fps]}"
@@ -66,6 +78,7 @@ object Tuner {
     fun restoreScript(p: Profile, others: List<Profile>): String {
         val s = Script()
         s.add("cmd game reset ${p.pkg}")
+        s.add("device_config delete game_overlay ${p.pkg}")
         s.add("cmd game mode standard ${p.pkg}")
         angleLines(s, others)
         s.add("cmd deviceidle whitelist -${p.pkg}")
